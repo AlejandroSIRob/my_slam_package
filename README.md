@@ -1,69 +1,99 @@
-Para la ejecución del codigo se dispone de dos métodos:
+# Proyecto de SLAM con Algoritmo de Split and Merge
 
-	-Opción 1:
+Este proyecto contiene un sistema completo de SLAM (Simultaneous Localization and Mapping), que ha sido diseñado y probado específicamente para funcionar dentro del entorno de simulación Gazebo, utilizando ROS Kinetic como middleware de comunicación entre nodos, y con una implementación personalizada del algoritmo Split and Merge. El objetivo principal de este sistema es detectar segmentos en el entorno mediante datos LIDAR, extraer landmarks relevantes y realizar estimaciones de posición utilizando un filtro EKF.
 
-	Descargar la siguiente máquina virtual: https://nextcloud.citius.usc.es/s/2oJ8AXpRxKmzKLR
-	Contraseña: robotica
-	
+---
 
-	-Opción 2:
+## 📁 Estructura del paquete `my_slam_package`
 
-	ROS: Instala la versión adecuada para tu sistema operativo:
+El paquete `my_slam_package` se encuentra dentro del espacio de trabajo `catkin_ws`, y presenta la siguiente estructura de carpetas:
 
-	    ROS Kinetic (Ubuntu 16.04)
-	    ROS Melodic (Ubuntu 18.04)
+```
+catkin_ws/
+└── src/
+    └── my_slam_package/
+        ├── CMakeLists.txt
+        ├── config/
+        │   └── custom_slam.rviz
+        ├── launch/
+        │   ├── slam_sim.launch
+        │   ├── slam_sim_2.launch
+        │   ├── slam_sim_3.launch
+        │   ├── slam_sim_4.launch
+        │   └── split.launch
+        ├── package.xml
+        ├── README.md
+        ├── scripts/
+        │   ├── ekf_slam.py
+        │   └── split.py
+        └── src/
+```
 
-	Gazebo: Incluido en la instalación de ROS.
-	Python 2.7.12: Versión ya instalada por defecto en las distribuciones compatibles con ROS.
+- El archivo `split.py`, ubicado dentro de `scripts/`, contiene la implementación del algoritmo de segmentación por divisiones recursivas.
+- El archivo `split.launch` es el encargado de lanzar el nodo de segmentación junto con el entorno de simulación y visualización en `rviz`.
 
-	-Librerias:
-		import rospy
-		import numpy as np
-		import random  
-		import json
-		import tf
-	-Dependencias ROS especificadas en el archivo package.xml:
+---
 
-		<build_depend>geometry_msgs</build_depend>
-		<build_depend>nav_msgs</build_depend>
-		<build_depend>rospy</build_depend>
-		<build_depend>sensor_msgs</build_depend>
-		<build_depend>std_msgs</build_depend>
-		<build_depend>tf</build_depend>
-		<build_depend>visualization_msgs</build_depend>
+## ▶️ Ejecución del sistema
 
-	-Comunes:
-	Debes introducir el paquete enviado y el subpaquete de complementos en el catkin_ws
+La ejecución se realiza desde el entorno de terminal de ROS en el directorio raíz del espacio de trabajo (`catkin_ws`), mediante el siguiente comando:
 
-Método de lanzado 1:
+```bash
+roslaunch my_slam_package split.launch
+```
 
-	Mapa 1:
-		roslaunch turtlebot3_gazebo turtlebot3_stage_1.launch
-		rosrun rviz rviz ( cargar configuracion de : /home/robotica/catkin_ws/src/my_slam_package/config)
-		rosrun my_slam_package ekf_slam.py
-	Mapa 2:
-		roslaunch turtlebot3_gazebo turtlebot3_stage_2.launch
-		rosrun rviz rviz ( cargar configuracion de : /home/robotica/catkin_ws/src/my_slam_package/config)
-		rosrun my_slam_package ekf_slam.py
+---
 
-	Mapa 3:
-		roslaunch turtlebot3_gazebo turtlebot3_world.launch
-		rosrun rviz rviz ( cargar configuracion de : /home/robotica/catkin_ws/src/my_slam_package/config)
-		rosrun my_slam_package ekf_slam.py
+## ⚙️ Requisitos y dependencias
 
-	Mapa 4:
-		roslaunch turtlebot3_gazebo turtlebot3_stage_4.launch
-		rosrun rviz rviz ( cargar configuracion de : /home/robotica/catkin_ws/src/my_slam_package/config)
-		rosrun my_slam_package ekf_slam.py
+### Opción 1: Máquina virtual preconfigurada
+
+Para facilitar la ejecución y evitar problemas de compatibilidad, se recomienda usar la siguiente máquina virtual, ya configurada y probada:
+
+- **Descarga directa**: [Máquina Virtual SLAM ROS](https://nextcloud.citius.usc.es/s/2oJ8AXpRxKmzKLR)
+- **Contraseña**: `robotica`
+
+Esta opción incluye todas las dependencias necesarias preinstaladas, por lo que se puede lanzar el sistema directamente desde un terminal en la VM.
+
+---
+
+### Opción 2: Instalación manual en sistema Ubuntu
+
+#### Versión recomendada de sistema operativo:
+
+- Ubuntu 16.04 (ROS Kinetic)
+- Ubuntu 18.04 (ROS Melodic)
+
+#### Dependencias de ROS necesarias (declaradas en `package.xml`):
+
+```xml
+<build_depend>geometry_msgs</build_depend>
+<build_depend>nav_msgs</build_depend>
+<build_depend>rospy</build_depend>
+<build_depend>sensor_msgs</build_depend>
+<build_depend>std_msgs</build_depend>
+<build_depend>tf</build_depend>
+<build_depend>visualization_msgs</build_depend>
+```
+
+#### Librerías Python requeridas:
+
+```python
+import rospy
+import numpy as np
+import random  
+import json
+import tf
+```
+
+#### Requisitos adicionales:
+
+- **Python 2.7.12**, instalado por defecto en sistemas Ubuntu compatibles con ROS.
+- **Gazebo**, incluido con la instalación de ROS, para simular el entorno y el robot.
+
+---
 
 
+## 📌 Notas finales
 
-Método de lanzado 2:
-
-	Mapa 1:roslaunch my_slam_package slam_sim_2.launch 
-	Mapa 2:roslaunch my_slam_package slam_sim_3.launch 
-	Mapa 3:roslaunch my_slam_package slam_sim.launch
-	Mapa 4:roslaunch my_slam_package slam_sim_4.launch 
-
-
-
+Este paquete forma parte de una práctica avanzada de percepción robótica en simulación; permite comprender el flujo completo desde la adquisición de datos con LIDAR hasta la extracción de segmentos y posterior estimación de la pose del robot mediante SLAM. Se recomienda analizar con detalle el código de `split.py` y utilizar `rviz` para la visualización clara de los segmentos generados, lo cual es esencial para el entendimiento y depuración del sistema.
