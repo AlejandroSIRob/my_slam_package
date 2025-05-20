@@ -46,18 +46,7 @@ roslaunch my_slam_package split.launch
 
 ## ⚙️ Requisitos y dependencias
 
-### Opción 1: Máquina virtual preconfigurada
-
-Para facilitar la ejecución y evitar problemas de compatibilidad, se recomienda usar la siguiente máquina virtual, ya configurada y probada:
-
-- **Descarga directa**: [Máquina Virtual SLAM ROS](https://nextcloud.citius.usc.es/s/2oJ8AXpRxKmzKLR)
-- **Contraseña**: `robotica`
-
-Esta opción incluye todas las dependencias necesarias preinstaladas, por lo que se puede lanzar el sistema directamente desde un terminal en la VM.
-
----
-
-### Opción 2: Instalación manual en sistema Ubuntu
+### Instalación manual en sistema Ubuntu
 
 #### Versión recomendada de sistema operativo:
 
@@ -93,6 +82,27 @@ import tf
 
 ---
 
+## 📦 Repositorios necesarios
+
+Este proyecto se compone de **dos repositorios** que deben instalarse dentro del espacio de trabajo `catkin_ws/src`:
+
+1. **Repositorio principal (este):**
+```
+cd ~/catkin_ws/src
+git clone https://github.com/AlejandroSIRob/my_slam_package.git
+```
+2. **Repositorio complementario de simulación:**
+
+Este repositorio incluye los mundos, modelos y lanzadores necesarios para la simulación con TurtleBot3 en Gazebo:
+```
+git clone https://github.com/AlejandroSIRob/turtlebot3_gazebo.git
+```
+**Después de clonar ambos repositorios, vuelve al directorio raíz del workspace y compílalo:**
+
+```
+cd ~/catkin_ws
+catkin_make
+```
 
 ## 📌 Notas finales
 
