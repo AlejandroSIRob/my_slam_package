@@ -1,0 +1,10 @@
+<launch>
+  <!-- Lanzar Gazebo con el mundo -->
+  <include file="$(find turtlebot3_gazebo)/launch/turtlebot3_stage_2.launch"/>
+
+  <!-- Nodo de SLAM -->
+  <node name="ekf_slam_node" pkg="my_slam_package" type="split.py" output="screen"/>
+
+ <!-- Lanzar RViz con configuración personalizada -->
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find my_slam_package)/config/custom_slam.rviz"/>
+</launch>
