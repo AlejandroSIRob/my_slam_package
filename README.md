@@ -16,15 +16,10 @@ catkin_ws/
         ├── config/
         │   └── custom_slam.rviz
         ├── launch/
-        │   ├── slam_sim.launch
-        │   ├── slam_sim_2.launch
-        │   ├── slam_sim_3.launch
-        │   ├── slam_sim_4.launch
         │   └── split.launch
         ├── package.xml
         ├── README.md
         ├── scripts/
-        │   ├── ekf_slam.py
         │   └── split.py
         └── src/
 ```
