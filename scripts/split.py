@@ -55,7 +55,7 @@ class Segment:
         print('Segment: ', self.idx0, '-', self.idx1)
 
 class SplitAndMerge:
-    def __init__(self, dist=0.1, angle=np.pi/30, purge_pts=12, purge_len=0.3):
+    def __init__(self, dist=0.1, angle=np.pi/30, purge_pts=10, purge_len=0.3):
         self.d_th = dist        # Threshold distance (split)
         self.a_th = angle       # Threshold angle (merge)
         self.pur_pts = purge_pts  # Min number of points (purge)
@@ -76,8 +76,7 @@ class SplitAndMerge:
                 if dist > max_dist:
                     max_dist = dist
                     split_idx = i
-
-            if max_dist > self.d_th:
+            if max_dist > self.d_th :#or max_dist1 > dist1_th:
                 segments.put(Segment(Pts[split_idx], segment.p1, split_idx, segment.idx1))
                 segments.put(Segment(segment.p0, Pts[split_idx], segment.idx0, split_idx))
             else:
@@ -106,17 +105,23 @@ class SplitAndMerge:
 
         return final_segments
 
-    def purge(self, segs_in): # Filtra segmentos muy pequeños
+
+    def purge(self, segs_in, Pts): # Filtra segmentos muy pequeños
         segs_out = []
         for seg in segs_in:
             if (seg.idx1 - seg.idx0 >= self.pur_pts) and (seg.length() >= self.pur_len):
-                segs_out.append(seg)
+                valid = True
+                for ii in range(seg.idx0, seg.idx1-1):
+                    if np.linalg.norm(np.array(Pts[ii])-np.array(Pts[ii+1])) > 0.3:
+                        valid = False
+                if valid:
+                    segs_out.append(seg)
         return segs_out
            
     def __call__(self, Pts):
         seg0 = self.split(Pts)
         seg1 = self.merge(seg0)
-        seg2 = self.purge(seg1)
+        seg2 = self.purge(seg1, Pts)
         return seg2
 
 class EKFSLAMNode:
@@ -139,7 +144,7 @@ class EKFSLAMNode:
         self.grid = np.zeros((self.map_width, self.map_height), dtype=np.int8)
        
         # Inicializar SplitAndMerge con parámetros adecuados
-        self.split_merge = SplitAndMerge(dist=0.05, angle=np.pi/6, purge_pts=5, purge_len=0.2)
+        self.split_merge = SplitAndMerge(dist=0.1, angle=np.pi/30, purge_pts=10, purge_len=0.3)
        
         self.odom_sub = rospy.Subscriber('/odom', Odometry, self.odom_callback)
         self.scan_sub = rospy.Subscriber('/scan', LaserScan, self.scan_callback)
@@ -168,15 +173,15 @@ class EKFSLAMNode:
         for key in set(keys_to_remove):
             del self.landmarks[key]
    
-    def detect_corners(self, segments, angle_threshold=np.pi/30): # 10 grados np.pi/18
+    def detect_corners(self, segments, angle_threshold=np.pi/30, distancia_alcance_deteccion= 2): # +-6 grados, podemos probar con np.pi/36 
         """Detecta esquinas en los segmentos encontrados."""
         corners = []
         if len(segments) < 2:
             return corners
 
         # Parámetros para filtrado
-        min_segment_length = 0.25  # Longitud segmentos
-        join_threshold = 0.08      # Tolerancia
+        min_segment_length = 0.2  # Longitud segmentos
+        join_threshold = 0.05      # Tolerancia SPUEDE SUBIR
 
         for i in range(len(segments)-1):
             s1 = segments[i]
@@ -188,31 +193,43 @@ class EKFSLAMNode:
                 continue
 
             # Distancia entre los extremos que se tocan
-            dist_join = np.linalg.norm(np.array(s1.p1) - np.array(s2.p0))
+            dist_join = np.linalg.norm(np.array(s1.p1) - np.array(s2.p0)) # REVISAR
 
             # Si los extremos no están suficientemente cerca, ignoramos
-            if dist_join > join_threshold:
+            if dist_join > join_threshold: # para verificar si se tocan
                 continue
-
-
+            
             # Si s1.p1 y s2.p0 están algo separados pero apuntan en la misma dirección
             dir1 = np.array(s1.p1) - np.array(s1.p0)
             dir2 = np.array(s2.p1) - np.array(s2.p0)
             dir1 /= np.linalg.norm(dir1)
             dir2 /= np.linalg.norm(dir2)
             dot_product = np.dot(dir1, dir2)
+
+            
+            # Filtro adicional de simetría respecto al robot
+            robot_vec = np.array(self.state[:2])
+            if np.dot(robot_vec - np.array(s1.p1), dir1) < 0 and np.dot(robot_vec - np.array(s2.p0), dir2) < 0:
+                continue  # Ambos segmentos "miran" al robot, sospechoso
+            
+
+
             # Si son casi colineales pero separados, probablemente son la misma pared partida → no esquina
-            if dot_product > 0.95 and dist_join > 0.04:  # Puedes ajustar 0.04 según el ruido
-                continue  # No es una esquina real
+            '''if dot_product > 0.05 :  # Puedes ajustar 0.04 según el ruido
+                continue  # No es una esquina real'''
 
             # Verificar si hay continuidad después de s2
-            if i + 2 < len(segments):
+            '''if i + 2 < len(segments):
                 s3 = segments[i + 2]
                 # Si s2 y s3 están unidos y casi alineados, no es una esquina real
                 if np.linalg.norm(np.array(s2.p1) - np.array(s3.p0)) < join_threshold:
-                    continue  # Pared continua, no es esquina real
+                    continue  # Pared continua, no es esquina real'''
    
-            angle = abs(s1.angle(s2))
+            #angle = abs(s1.angle(s2))
+            angle=np.emath.arccos(dot_product)
+            #print("Comparando segmentos:")
+            #print("  s1: {} → {}".format(s1.p0, s1.p1))
+            #print("  s2: {} → {}".format(s2.p0, s2.p1))
            
             # Si el ángulo es cercano a 90 grados, consideramos que hay una esquina
             #if abs(angle - np.pi/2) < angle_threshold:
@@ -220,6 +237,12 @@ class EKFSLAMNode:
 
                 # La esquina es el punto de unión entre los dos segmentos
                 corner = s1.p1  # o s2.p0, deberían ser el mismo punto
+                
+                '''if np.linalg.norm(np.array(corner) - self.state[:2]) > distancia_alcance_deteccion:
+                    continue  # Está muy lejos, posiblemente es una proyección falsa''' # REVISAR
+           
+                print(" Esquina de 90° detectada en el punto: ({:.2f}, {:.2f})".format(corner[0], corner[1]))
+                print("  Ángulo entre segmentos: {:.2f}°".format(np.degrees(angle)))
                 corners.append(corner)
                
         return corners
