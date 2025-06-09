@@ -13,44 +13,92 @@ from visualization_msgs.msg import Marker, MarkerArray
 from tf.transformations import euler_from_quaternion
 import tf
 import random
-import json
 from geometry_msgs.msg import Point
 
 
 class Segment:
     def __init__(self, p0, p1, idx0, idx1):
+        """
+        Constructor de un segmento.
+
+        Parámetros:
+        - p0: punto inicial del segmento (tupla o lista de dos coordenadas)
+        - p1: punto final del segmento
+        - idx0: índice del punto inicial en la lista original
+        - idx1: índice del punto final en la lista original
+        """
         self.p0 = p0
         self.p1 = p1
         self.idx0 = idx0
         self.idx1 = idx1
 
-    def length(self): # Calcula longitud del segmento
+    def length(self):
+        """
+        Calcula la longitud euclídea del segmento.
+        """
         return np.linalg.norm(np.array(self.p1, np.float32) - np.array(self.p0, np.float32))
 
-    def distance(self, p): # Distancia perpendicular de un punto al segmento
+    def distance(self, p):
+        """
+        Calcula la distancia perpendicular de un punto arbitrario al segmento.
+
+        Parámetros:
+        - p: punto (x, y) desde el cual calcular la distancia al segmento.
+
+        Devuelve:
+        - Distancia mínima desde el punto 'p' al segmento.
+        """
         l = self.length()
         if l == 0:
-            return 0
-       
+            return 0  # segmento degenerado (dos puntos iguales)
+
+        # Vector director del segmento
         v = np.array(self.p1) - np.array(self.p0)
+        # Vector perpendicular normalizado
         v_perp = np.array([-v[1], v[0]]) / np.linalg.norm(v)
+        # Proyección del vector p - p0 sobre la perpendicular
         d = abs(np.dot(v_perp, np.array(p) - np.array(self.p0)))
         return d
-   
-    def distance_mean_variance(self, point, cov_matrix): # Distancia media y varianza considerando incertidumbre
+
+    def distance_mean_variance(self, point, cov_matrix):
+        """
+        Calcula la distancia media y varianza de un punto al segmento,
+        considerando incertidumbre representada por una matriz de covarianza.
+
+        Parámetros:
+        - point: coordenadas del punto (x, y)
+        - cov_matrix: matriz 2x2 de covarianza asociada al punto
+
+        Devuelve:
+        - mean_distance: distancia esperada del punto al segmento
+        - variance: varianza proyectada en la dirección perpendicular al segmento
+        """
         v = np.array(self.p1) - np.array(self.p0)
         v_perp = np.array([-v[1], v[0]]) / np.linalg.norm(v)
         mean_distance = abs(np.dot(v_perp, np.array(point) - np.array(self.p0)))
         variance = np.dot(v_perp, np.dot(cov_matrix, v_perp.T))
         return mean_distance, variance
 
-    def angle(self, s): # Angulo entre dos segmentos
+    def angle(self, s):
+        """
+        Calcula el ángulo entre este segmento y otro segmento 's'.
+
+        Parámetros:
+        - s: otro objeto Segment con el que se quiere calcular el ángulo
+
+        Devuelve:
+        - ángulo en radianes en el rango [-pi, pi]
+        """
         v1 = np.array(self.p1) - np.array(self.p0)
         v2 = np.array(s.p1) - np.array(s.p0)
         angle = np.arctan2(v1[1], v1[0]) - np.arctan2(v2[1], v2[0])
-        return np.arctan2(np.sin(angle), np.cos(angle))
+        return np.arctan2(np.sin(angle), np.cos(angle))  # normaliza el ángulo
 
     def write(self):
+        """
+        Imprime en consola los puntos extremos del segmento y sus índices.
+        Útil para depuración.
+        """
         print('Segment: ', self.p0, '-', self.p1)
         print('Segment: ', self.idx0, '-', self.idx1)
 
@@ -128,16 +176,23 @@ class EKFSLAMNode:
     def __init__(self):
         rospy.init_node('ekf_slam_node', anonymous=True)
         print("Nodo creado")
-        self.state = np.zeros(3)  # [x, y, theta]
-        self.covariance = np.eye(3)
-        self.landmarks = {}
+
+        # Estado inicial del robot: [x, y, theta]
+        self.state = np.zeros(3)
+        self.covariance = np.eye(3)  # Matriz de covarianza inicial
+
+        self.landmarks = {} # Diccionario de landmarks detectados
         self.H = np.zeros((2, 3))
+
         self.dt = 0.1
+
+        # Distancias mínimas medidas por el láser (se usan para evitar obstáculos)
         self.min_range = float('inf')
         self.front_dist = float('inf')
         self.left_dist = float('inf')
         self.right_dist = float('inf')
-       
+
+        # Mapa de ocupación (grid) para visualización (opcional)
         self.map_width = 100
         self.map_height = 100
         self.resolution = 0.1
@@ -145,20 +200,21 @@ class EKFSLAMNode:
        
         # Inicializar SplitAndMerge con parámetros adecuados
         self.split_merge = SplitAndMerge(dist=0.1, angle=np.pi/30, purge_pts=10, purge_len=0.3)
-       
+        
+        # Subscriptores a sensores
         self.odom_sub = rospy.Subscriber('/odom', Odometry, self.odom_callback)
         self.scan_sub = rospy.Subscriber('/scan', LaserScan, self.scan_callback)
-       
+               
+        # Publicadores
         self.cmd_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
         self.marker_pub = rospy.Publisher('/landmarks', MarkerArray, queue_size=10)
         self.map_pub = rospy.Publisher('/occupancy_grid', OccupancyGrid, queue_size=10)
         self.sensor_cone_pub = rospy.Publisher('/sensor_cone', Marker, queue_size=10)              # Cono teórico (gris)
         self.observed_cone_pub = rospy.Publisher('/observed_sensor_cone', Marker, queue_size=10)   # Cono observado (blanco)
 
-
+        # Broadcaster de transformaciones para visualización en RViz
         self.tf_broadcaster = tf.TransformBroadcaster()
         rospy.Timer(rospy.Duration(0.1), self.publish_tf)
-        #rospy.Timer(rospy.Duration(0.1), self.control_loop)
 
         rospy.loginfo("EKF-SLAM Nodo Inicializado")
 
@@ -173,7 +229,7 @@ class EKFSLAMNode:
         for key in set(keys_to_remove):
             del self.landmarks[key]
    
-    def detect_corners(self, segments, angle_threshold=np.pi/30, distancia_alcance_deteccion= 2): # +-6 grados, podemos probar con np.pi/36 
+    def detect_corners(self, segments, angle_threshold=np.pi/30): # +-6 grados, podemos probar con np.pi/36 
         """Detecta esquinas en los segmentos encontrados."""
         corners = []
         if len(segments) < 2:
@@ -181,7 +237,7 @@ class EKFSLAMNode:
 
         # Parámetros para filtrado
         min_segment_length = 0.2  # Longitud segmentos
-        join_threshold = 0.05      # Tolerancia SPUEDE SUBIR
+        join_threshold = 0.08      # Tolerancia, puede estas entre 0.05 y 0.1
 
         for i in range(len(segments)-1):
             s1 = segments[i]
@@ -193,7 +249,7 @@ class EKFSLAMNode:
                 continue
 
             # Distancia entre los extremos que se tocan
-            dist_join = np.linalg.norm(np.array(s1.p1) - np.array(s2.p0)) # REVISAR
+            dist_join = np.linalg.norm(np.array(s1.p1) - np.array(s2.p0))
 
             # Si los extremos no están suficientemente cerca, ignoramos
             if dist_join > join_threshold: # para verificar si se tocan
@@ -212,35 +268,14 @@ class EKFSLAMNode:
             if np.dot(robot_vec - np.array(s1.p1), dir1) < 0 and np.dot(robot_vec - np.array(s2.p0), dir2) < 0:
                 continue  # Ambos segmentos "miran" al robot, sospechoso
             
-
-
-            # Si son casi colineales pero separados, probablemente son la misma pared partida → no esquina
-            '''if dot_product > 0.05 :  # Puedes ajustar 0.04 según el ruido
-                continue  # No es una esquina real'''
-
-            # Verificar si hay continuidad después de s2
-            '''if i + 2 < len(segments):
-                s3 = segments[i + 2]
-                # Si s2 y s3 están unidos y casi alineados, no es una esquina real
-                if np.linalg.norm(np.array(s2.p1) - np.array(s3.p0)) < join_threshold:
-                    continue  # Pared continua, no es esquina real'''
-   
-            #angle = abs(s1.angle(s2))
             angle=np.emath.arccos(dot_product)
-            #print("Comparando segmentos:")
-            #print("  s1: {} → {}".format(s1.p0, s1.p1))
-            #print("  s2: {} → {}".format(s2.p0, s2.p1))
            
             # Si el ángulo es cercano a 90 grados, consideramos que hay una esquina
-            #if abs(angle - np.pi/2) < angle_threshold:
-            if abs(angle - np.pi/2) < angle_threshold: # or abs(2*np.pi - angle) < angle_threshold:
+            if abs(angle - np.pi/2) < angle_threshold:
 
                 # La esquina es el punto de unión entre los dos segmentos
                 corner = s1.p1  # o s2.p0, deberían ser el mismo punto
                 
-                '''if np.linalg.norm(np.array(corner) - self.state[:2]) > distancia_alcance_deteccion:
-                    continue  # Está muy lejos, posiblemente es una proyección falsa''' # REVISAR
-           
                 print(" Esquina de 90° detectada en el punto: ({:.2f}, {:.2f})".format(corner[0], corner[1]))
                 print("  Ángulo entre segmentos: {:.2f}°".format(np.degrees(angle)))
                 corners.append(corner)
@@ -281,7 +316,6 @@ class EKFSLAMNode:
         # Asociar landmarks y actualizar el EKF
         self.associate_landmarks(corners)
         self.publish_landmarks(corners)
-        #self.create_occupancy_grid()
         self.publish_sensor_cone(msg)               # → Campo teórico (gris claro)
         self.publish_observed_sensor_cone(msg)      # → Campo observado (blanco)
         self.control_loop()
@@ -359,36 +393,6 @@ class EKFSLAMNode:
 
         self.sensor_cone_pub.publish(marker)
 
-
-
-
-    def create_occupancy_grid(self):
-        if rospy.is_shutdown():
-            return
-           
-        # Limpiar el grid (opcional, dependiendo de tu implementación)
-        self.grid.fill(0)
-       
-        # Actualizar el grid con los landmarks
-        for (lx, ly) in self.landmarks.values():
-            x = int((lx + self.map_width / 2 * self.resolution) / self.resolution)
-            y = int((ly + self.map_height / 2 * self.resolution) / self.resolution)
-            if 0 <= x < self.map_width and 0 <= y < self.map_height:
-                self.grid[x, y] = 100
-               
-        # Publicar el grid
-        occupancy_grid = OccupancyGrid()
-        occupancy_grid.header = Header()
-        occupancy_grid.header.stamp = rospy.Time.now()
-        occupancy_grid.header.frame_id = "map"
-        occupancy_grid.info.resolution = self.resolution
-        occupancy_grid.info.width = self.map_width
-        occupancy_grid.info.height = self.map_height
-        occupancy_grid.info.origin.position.x = -self.map_width / 2 * self.resolution
-        occupancy_grid.info.origin.position.y = -self.map_height / 2 * self.resolution
-        occupancy_grid.info.origin.orientation.w = 1.0  
-        occupancy_grid.data = self.grid.flatten().tolist()
-        self.map_pub.publish(occupancy_grid)
 
     def publish_landmarks(self, corners):
         if not corners:
